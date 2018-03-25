@@ -1,13 +1,12 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
+"github.com/jinzhu/gorm"
+_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
 func main() {
-	r := gin.Default()
-	r.GET("/", func(c *gin.Context) {
-		c.String(200, "Hello World")
-	})
-	r.Run()
+    db, _ := gorm.Open("sqlite3", "./gorm.db")
+    defer db.Close()
 }
+
