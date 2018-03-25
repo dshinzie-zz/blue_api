@@ -11,7 +11,7 @@ var db *gorm.DB
 var err error
 
 type User struct {
-	ID        uint   `json:”id”`
+	ID        uint   `json:"id"`
 	FirstName string `json:"firstname"`
 	LastName  string `json:"lastname"`
 	Email     string `json:"email"`
@@ -46,9 +46,11 @@ func GetUsers(c *gin.Context) {
 
 func CreatePerson(c *gin.Context) {
 	var person User
-	c.BindJSON(&person)
-	fmt.Println(&person)
-	db.Create(&person)
-	fmt.Println(person)
-	c.JSON(200, person)
+    if err := c.ShouldBindJSON(&person); err != nil {
+        c.AbortWithStatus(404)
+        fmt.Println(err)
+    } else {
+        db.Create(&person)
+        c.JSON(200, person)
+    }
 }
