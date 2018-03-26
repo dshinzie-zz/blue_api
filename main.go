@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+    "time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
+    "github.com/appleboy/gin-jwt"
 )
 
 var db *gorm.DB
@@ -28,7 +31,58 @@ func main() {
 	db.AutoMigrate(&User{})
 	r := gin.Default()
 
-	r.GET("/", GetUsers)
+    authMiddleware := &jwt.GinJWTMiddleware{
+        Realm:      "test zone",
+        Key:        []byte("secret key"),
+        Timeout:    time.Hour,
+        MaxRefresh: time.Hour,
+        Authenticator: func(userId string, password string, c *gin.Context) (string, bool) {
+            if len(AuthUser(userId, password)) == 1  {
+                return userId, true
+            }
+
+            return userId, false
+        },
+        Authorizator: func(userId string, c *gin.Context) bool {
+            if userId == "admin" {
+                return true
+            }
+
+            return false
+        },
+        Unauthorized: func(c *gin.Context, code int, message string) {
+            c.JSON(code, gin.H{
+                "code":    code,
+                "message": message,
+            })
+        },
+        // TokenLookup is a string in the form of "<source>:<name>" that is used
+        // to extract token from the request.
+        // Optional. Default value "header:Authorization".
+        // Possible values:
+        // - "header:<name>"
+        // - "query:<name>"
+        // - "cookie:<name>"
+        TokenLookup: "header:Authorization",
+        // TokenLookup: "query:token",
+        // TokenLookup: "cookie:token",
+
+        // TokenHeadName is a string in the header. Default value is "Bearer"
+        TokenHeadName: "Bearer",
+
+        // TimeFunc provides the current time. You can override it to use another time value. This is useful for testing or if your server uses a different time zone than your tokens.
+        TimeFunc: time.Now,
+    }
+
+    auth := r.Group("/auth")
+    auth.Use(authMiddleware.MiddlewareFunc())
+    {
+        auth.GET("/refresh_token", authMiddleware.RefreshHandler)
+        auth.GET("/hello", helloHandler)
+    }
+
+
+    r.POST("/login", authMiddleware.LoginHandler)
 	r.POST("/people", CreatePerson)
 
 	r.Run(":8080")
@@ -53,4 +107,19 @@ func CreatePerson(c *gin.Context) {
         db.Create(&person)
         c.JSON(200, person)
     }
+}
+
+func helloHandler(c *gin.Context) {
+    claims := jwt.ExtractClaims(c)
+    c.JSON(200, gin.H{
+        "userID": claims["id"],
+        "text":   "Hello World.",
+    })
+}
+
+func AuthUser(username, password string) []User {
+    var users []User
+    db.Where("email = ? AND password = ?", username, password).First(&users)
+    fmt.Println(users)
+    return users
 }
